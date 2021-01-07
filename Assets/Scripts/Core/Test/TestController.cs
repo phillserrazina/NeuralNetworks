@@ -20,6 +20,7 @@ namespace Test
         public float avgSpeedMultiplier = 0.2f;
         public float sensorMultiplier = 0.1f;
         public float checkpointsMultiplier = 0.1f;
+        public float goalMultiplier = 0.5f;
 
         [Header("Network Options")]
         public int LAYERS = 1;
@@ -27,6 +28,7 @@ namespace Test
         public LayerMask WallLayer;
         public LayerMask CheckpointLayer;
         public LayerMask EnemyLayer;
+        public LayerMask GoalLayer;
         public float threshold = 1f;
 
         private Vector3 lastPosition;
@@ -35,6 +37,7 @@ namespace Test
 
         private float[] sensors = new float[3];
         private float[] checkpointSensors = new float[2];
+        private float goalSensor;
         private float[] dangerSensors = new float[8];
 
         public int LapsDone { get; private set; }
@@ -79,6 +82,8 @@ namespace Test
             }
         }
 
+        [SerializeField] private Transform goal;
+
         // EXECUTION FUNCTIONS
         private void Awake() 
         {
@@ -107,7 +112,7 @@ namespace Test
 
             (a, t) = network.RunNetwork(finalArray);
 
-            MoveCar(a,t);
+            Move(a,t);
 
             timeSinceStart += Time.deltaTime;
 
@@ -148,13 +153,14 @@ namespace Test
                                 (avgSpeed * avgSpeedMultiplier) +
                                 (sensorAvg * sensorMultiplier) +
                                 (checkpointSensorAvg * checkpointsMultiplier) +
-                                (dangerSensorAvg * sensorMultiplier);
+                                (dangerSensorAvg * sensorMultiplier) +
+                                (goalSensor * goalMultiplier);
 
             if (timeSinceStart > 20 && overallFitness < 40) {
                 Death();
             }
 
-            if (overallFitness >= 3000) {
+            if (overallFitness >= 1000) {
                 Death();
             }
 
@@ -181,6 +187,17 @@ namespace Test
                 }
             }
 
+            Ray goalRay = new Ray(transform.position, goal.position - transform.position);
+            RaycastHit goalHit;
+            Color goalHitColor = Color.blue;
+
+            if (Physics.Raycast(goalRay, out goalHit, 300f, GoalLayer)) {
+                goalSensor = 1/goalHit.distance;
+
+                Debug.DrawLine(goalRay.origin, goalHit.point, goalHitColor);
+            }
+
+            /*
             // CHECKPOINT SENSORS
             Vector3[] checkpointDirections = new Vector3[] {
                 transform.forward + transform.right * 0.05f,
@@ -227,10 +244,11 @@ namespace Test
                     Debug.DrawLine(r.origin, r.origin + dangerDirections[i].normalized * 20f, Color.yellow);
                 }
             }
+            */
         }
 
         private Vector3 inp;
-        public void MoveCar (float v, float h) {
+        public void Move(float v, float h) {
             inp = Vector3.Lerp(Vector3.zero,new Vector3(0,0,v*11.4f),0.02f);
             inp = transform.TransformDirection(inp);
             transform.position += inp;
