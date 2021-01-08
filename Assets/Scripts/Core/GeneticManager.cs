@@ -1,24 +1,26 @@
-﻿using System.Collections;
+﻿using UnityEngine;
 using System.Collections.Generic;
-using UnityEngine;
 
 using MathNet.Numerics.LinearAlgebra;
+using Coursework.Utils;
 
-namespace Coursework.Core.Entities
+namespace Coursework.Core
 {
     public class GeneticManager : MonoBehaviour
     {
         // VARIABLES
-        private NNetController controller;
+        [Header("References")]
+        public NetworkController controller;
 
         [Header("Controls")]
-        [SerializeField] private int initialPopulation = 50;
-        [Range(0.0f, 1.0f)] private float mutationRate = 0.055f;
+        public int initialPopulation = 85;
+        [Range(0.0f, 1.0f)]
+        public float mutationRate = 0.055f;
 
         [Header("Crossover Controls")]
-        [SerializeField] private int bestAgentSelection = 8;
-        [SerializeField] private int worstAgentSelection = 3;
-        [SerializeField] private int numberToCrossover;
+        public int bestAgentSelection = 8;
+        public int worstAgentSelection = 3;
+        public int numberToCrossover;
 
         private List<int> genePool = new List<int>();
 
@@ -27,57 +29,53 @@ namespace Coursework.Core.Entities
         private NeuralNetwork[] population;
 
         [Header("Public View")]
-        [SerializeField] private int currentGeneration;
-        [SerializeField] private int currentGenome;
+        public int currentGeneration;
+        public int currentGenome = 0;
+
+        public static GeneticManager Instance { get; private set; }
+
+        // EXECUTE FUNCTIONS
+        private void Awake() => Instance = this;
+        private void Start() => CreatePopulation();
 
         // METHODS
-        public void Initialize(NNetController controller) {
-            this.controller = controller;
-            CreatePopulation();
-        }
-
-        private void CreatePopulation() {
+        private void CreatePopulation()
+        {
             population = new NeuralNetwork[initialPopulation];
-
             FillPopulationWithRandomValues(population, 0);
             ResetToCurrentGenome();
         }
 
-        private void ResetToCurrentGenome() {
-            controller.ResetWithNetwork(population[currentGenome]);
-        }
+        private void ResetToCurrentGenome() => controller.ResetWithNetwork(population[currentGenome]);
 
-        private void FillPopulationWithRandomValues(NeuralNetwork[] newPopulation, int startingIndex) 
+        private void FillPopulationWithRandomValues (NeuralNetwork[] newPopulation, int startingIndex)
         {
-            while(startingIndex < initialPopulation) 
+            while (startingIndex < initialPopulation)
             {
-                newPopulation[startingIndex] = new NeuralNetwork();
-                newPopulation[startingIndex].Initialize(controller.NumOfSensors, controller.Layers, controller.Neurons);
+                newPopulation[startingIndex] = new NeuralNetwork(controller.SENSORS);
+                newPopulation[startingIndex].Initialize(controller.LAYERS, controller.NEURONS);
                 startingIndex++;
             }
         }
 
-        public void Kill(float fitness, NeuralNetwork network) 
+        public void Kill(float fitness, NeuralNetwork network)
         {
-            
-            if (currentGenome < population.Length - 1) 
+            if (currentGenome < population.Length -1)
             {
                 population[currentGenome].fitness = fitness;
                 currentGenome++;
                 ResetToCurrentGenome();
             }
-            else
-            {
-                RePopulate();
-            }
+            else Repopulate();
         }
 
-        private void RePopulate() {
+        
+        private void Repopulate()
+        {
             genePool.Clear();
             currentGeneration++;
             naturallySelected = 0;
-
-            SortPopulation();
+            SortingAlgorithms.BubbleSort(ref population);
 
             var newPopulation = PickBestPopulation();
 
@@ -87,53 +85,97 @@ namespace Coursework.Core.Entities
             FillPopulationWithRandomValues(newPopulation, naturallySelected);
 
             population = newPopulation;
+
             currentGenome = 0;
+
             ResetToCurrentGenome();
         }
 
-        private void Crossover(NeuralNetwork[] newPopulation)
+        private void Mutate(NeuralNetwork[] newPopulation)
         {
-            for (int i = 0; i < numberToCrossover; i += 2) {
-                int AIndex = i;
-                int BIndex = i + 1;
+            for (int i = 0; i < naturallySelected; i++)
+            {
+                for (int c = 0; c < newPopulation[i].weights.Count; c++)
+                {
+                    if (Random.Range(0.0f, 1.0f) < mutationRate)
+                    {
+                        newPopulation[i].weights[c] = MutateMatrix(newPopulation[i].weights[c]);
+                    }
+                }
+            }
+        }
+
+        private Matrix<float> MutateMatrix(Matrix<float> A)
+        {
+            int randomPoints = Random.Range(1, (A.RowCount * A.ColumnCount) / 7);
+
+            Matrix<float> C = A;
+
+            for (int i = 0; i < randomPoints; i++)
+            {
+                int randomColumn = Random.Range(0, C.ColumnCount);
+                int randomRow = Random.Range(0, C.RowCount);
+
+                C[randomRow, randomColumn] = Mathf.Clamp(C[randomRow, randomColumn] + Random.Range(-1f, 1f), -1f, 1f);
+            }
+
+            return C;
+        }
+
+        private void Crossover (NeuralNetwork[] newPopulation)
+        {
+            for (int i = 0; i < numberToCrossover; i+=2)
+            {
+                int aIndex = i;
+                int bIndex = i + 1;
 
                 if (genePool.Count >= 1)
                 {
-                    for (int j = 0; j < 100; j++)
+                    for (int l = 0; l < 100; l++)
                     {
-                        AIndex = genePool[Random.Range(0, genePool.Count)];
-                        BIndex = genePool[Random.Range(0, genePool.Count)];
+                        aIndex = genePool[Random.Range(0, genePool.Count)];
+                        bIndex = genePool[Random.Range(0, genePool.Count)];
 
-                        if(AIndex != BIndex)
+                        if (aIndex != bIndex)
                             break;
                     }
                 }
 
-                var child1 = new NeuralNetwork();
-                var child2 = new NeuralNetwork();
+                var child1 = new NeuralNetwork(controller.SENSORS);
+                var child2 = new NeuralNetwork(controller.SENSORS);
 
-                child1.Initialize(controller.NumOfSensors, controller.Layers, controller.Neurons);
-                child2.Initialize(controller.NumOfSensors, controller.Layers, controller.Neurons);
+                child1.Initialize(controller.LAYERS, controller.NEURONS);
+                child2.Initialize(controller.LAYERS, controller.NEURONS);
 
                 child1.fitness = 0;
                 child2.fitness = 0;
 
-                // Crossover weights
-                for (int k = 0; k < child1.weights.Count; k++)
+                for (int w = 0; w < child1.weights.Count; w++)
                 {
-                    bool randomizer = Random.value < 0.5f;
-
-                    child1.weights[k] = population[randomizer ? AIndex : BIndex].weights[k];
-                    child2.weights[k] = population[randomizer ? BIndex : AIndex].weights[k];
+                    if (Random.Range(0.0f, 1.0f) < 0.5f)
+                    {
+                        child1.weights[w] = population[aIndex].weights[w];
+                        child2.weights[w] = population[bIndex].weights[w];
+                    }
+                    else
+                    {
+                        child2.weights[w] = population[aIndex].weights[w];
+                        child1.weights[w] = population[bIndex].weights[w];
+                    }
                 }
 
-                // Crossover biases
-                for (int k = 0; k < child1.biases.Count; k++)
+                for (int w = 0; w < child1.biases.Count; w++)
                 {
-                    bool randomizer = Random.value < 0.5f;
-
-                    child1.biases[k] = population[randomizer ? AIndex : BIndex].biases[k];
-                    child2.biases[k] = population[randomizer ? BIndex : AIndex].biases[k];
+                    if (Random.Range(0.0f, 1.0f) < 0.5f)
+                    {
+                        child1.biases[w] = population[aIndex].biases[w];
+                        child2.biases[w] = population[bIndex].biases[w];
+                    }
+                    else
+                    {
+                        child2.biases[w] = population[aIndex].biases[w];
+                        child1.biases[w] = population[bIndex].biases[w];
+                    }
                 }
 
                 newPopulation[naturallySelected] = child1;
@@ -144,81 +186,38 @@ namespace Coursework.Core.Entities
             }
         }
 
-        private void Mutate(NeuralNetwork[] newPopulation)
+        private NeuralNetwork[] PickBestPopulation()
         {
-            for (int i = 0; i < naturallySelected; i++)
-            {
-                for ( int c = 0; c < newPopulation[i].weights.Count; c++)
-                {
-                    if (Random.value < mutationRate)
-                    {
-                        newPopulation[i].weights[c] = MutateMatrix(newPopulation[i].weights[c]);
-                    }
-                }
-            }
-        }
-
-        private Matrix<float> MutateMatrix(Matrix<float> mat)
-        {
-            int randomPoints = Random.Range(1, (mat.RowCount * mat.ColumnCount) / 7);
-
-            var c = mat;
-
-            for (int i = 0; i < randomPoints; i++)
-            {
-                int randomColumn = Random.Range(0, c.ColumnCount);
-                int randomRow = Random.Range(0, c.RowCount);
-
-                c[randomRow, randomColumn] = Mathf.Clamp(c[randomRow, randomColumn] + Random.Range(-1f, 1f), -1f, 1f);
-            }
-
-            return c;
-        }
-
-        private NeuralNetwork[] PickBestPopulation() {
             var newPopulation = new NeuralNetwork[initialPopulation];
 
-            for (int i = 0; i < bestAgentSelection; i++) {
-                newPopulation[naturallySelected] = population[i].InitializeCopy(controller.NumOfSensors, controller.Layers, controller.Neurons);
+            for (int i = 0; i < bestAgentSelection; i++)
+            {
+                newPopulation[naturallySelected] = population[i].InitializeCopy(controller.LAYERS, controller.NEURONS);
                 newPopulation[naturallySelected].fitness = 0;
                 naturallySelected++;
-
+                
                 int f = Mathf.RoundToInt(population[i].fitness * 10);
 
-                for (int c = 0; c <= f; c++) {
+                for (int c = 0; c < f; c++)
+                {
                     genePool.Add(i);
                 }
             }
 
-            for (int i = 0; i < worstAgentSelection; i++) {
+            for (int i = 0; i < worstAgentSelection; i++)
+            {
                 int last = population.Length - 1;
                 last -= i;
 
                 int f = Mathf.RoundToInt(population[last].fitness * 10);
 
-                for (int c = 0; c <= f; c++) {
+                for (int c = 0; c < f; c++)
+                {
                     genePool.Add(last);
                 }
             }
 
-
             return newPopulation;
-        }
-
-        private void SortPopulation() 
-        {
-            for (int i = 0; i < population.Length; i++)
-            {
-                for (int j = 0; j < population.Length; j++)
-                {
-                    if (population[i].fitness < population[j].fitness)
-                    {
-                        var temp = population[i];
-                        population[i] = population[j];
-                        population[j] = temp;
-                    }
-                }   
-            }
         }
     }
 }
