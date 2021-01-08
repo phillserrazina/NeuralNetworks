@@ -1,62 +1,84 @@
-﻿using System;
+﻿using UnityEngine;
 using System.Collections.Generic;
+
+using System;
 using MathNet.Numerics.LinearAlgebra;
+
+using Random = UnityEngine.Random;
 
 namespace Coursework.Core
 {
     public class NeuralNetwork
     {
         // VARIABLES
-        public Matrix<float> inputLayer = Matrix<float>.Build.Dense(1, 8);        
+        private const int NUMBER_OF_INPUTS = 13;
+        public Matrix<float> inputLayer = Matrix<float>.Build.Dense(1, NUMBER_OF_INPUTS);
+
         public List<Matrix<float>> hiddenLayers = new List<Matrix<float>>();
+
         public Matrix<float> outputLayer = Matrix<float>.Build.Dense(1, 2);
 
         public List<Matrix<float>> weights = new List<Matrix<float>>();
+
         public List<float> biases = new List<float>();
-    
+
         public float fitness;
 
+        private int numberOfInputs;
+
+        // EXECUTION FUNCTIONS
+        public NeuralNetwork(int numberOfInputs) { 
+            this.numberOfInputs = numberOfInputs;
+            inputLayer = Matrix<float>.Build.Dense(1, numberOfInputs); 
+        }
+
         // METHODS
-        public void Initialize(int inputLayerSize, int hiddenLayerCount, int hiddenNeuronCount) {
-            inputLayer = Matrix<float>.Build.Dense(1, inputLayerSize);
-            
+        public void Initialize (int hiddenLayerCount, int hiddenNeuronCount)
+        {
             inputLayer.Clear();
             hiddenLayers.Clear();
             outputLayer.Clear();
             weights.Clear();
             biases.Clear();
 
-            for (int i = 0; i <= hiddenLayerCount; i++) {
-                var f = Matrix<float>.Build.Dense(1, hiddenLayerCount);
+            for (int i = 0; i < hiddenLayerCount + 1; i++)
+            {
+
+                Matrix<float> f = Matrix<float>.Build.Dense(1, hiddenNeuronCount);
+
                 hiddenLayers.Add(f);
 
-                biases.Add(UnityEngine.Random.Range(-1f, 1f));
+                biases.Add(Random.Range(-1f, 1f));
 
-                // Set up weights
+                //WEIGHTS
                 if (i == 0)
                 {
-                    var inputToH1 = Matrix<float>.Build.Dense(inputLayerSize, hiddenNeuronCount);
+                    Matrix<float> inputToH1 = Matrix<float>.Build.Dense(numberOfInputs, hiddenNeuronCount);
                     weights.Add(inputToH1);
                 }
 
-                var hiddenToHidden = Matrix<float>.Build.Dense(hiddenNeuronCount, hiddenNeuronCount);
-                weights.Add(hiddenToHidden);
+                Matrix<float> HiddenToHidden = Matrix<float>.Build.Dense(hiddenNeuronCount, hiddenNeuronCount);
+                weights.Add(HiddenToHidden);
+
             }
 
-            var outputWeight = Matrix<float>.Build.Dense(hiddenNeuronCount, 2);
-            weights.Add(outputWeight);
-            biases.Add(UnityEngine.Random.Range(-1f, 1f));
+            Matrix<float> OutputWeight = Matrix<float>.Build.Dense(hiddenNeuronCount, 2);
+            weights.Add(OutputWeight);
+            biases.Add(Random.Range(-1f, 1f));
 
-            RandomizeWeights();
+            RandomiseWeights();
+
         }
 
-        public NeuralNetwork InitializeCopy(int inputLayerSize, int hiddenLayerCount, int hiddenNeuronCount) {
-            var n = new NeuralNetwork();
+        public NeuralNetwork InitializeCopy (int hiddenLayerCount, int hiddenNeuronCount)
+        {
+            NeuralNetwork n = new NeuralNetwork(numberOfInputs);
 
-            var newWeights = new List<Matrix<float>>();
+            List<Matrix<float>> newWeights = new List<Matrix<float>>();
 
-            for (int i = 0; i < weights.Count; i++) {
-                var currentWeight = Matrix<float>.Build.Dense(weights[i].RowCount, weights[i].ColumnCount);
+            for (int i = 0; i < this.weights.Count; i++)
+            {
+                Matrix<float> currentWeight = Matrix<float>.Build.Dense(weights[i].RowCount, weights[i].ColumnCount);
 
                 for (int x = 0; x < currentWeight.RowCount; x++)
                 {
@@ -69,44 +91,48 @@ namespace Coursework.Core
                 newWeights.Add(currentWeight);
             }
 
-            var newBiases = new List<float>();
+            List<float> newBiases = new List<float>();
+
             newBiases.AddRange(biases);
 
             n.weights = newWeights;
             n.biases = newBiases;
 
-            n.InitializeHidden(inputLayerSize, hiddenLayerCount, hiddenNeuronCount);
+            n.InitializeHidden(hiddenLayerCount, hiddenNeuronCount);
 
             return n;
         }
 
-        public void InitializeHidden(int inputLayerSize, int hiddenLayerCount, int hiddenNeuronCount)
+        public void InitializeHidden (int hiddenLayerCount, int hiddenNeuronCount)
         {
             inputLayer.Clear();
             hiddenLayers.Clear();
             outputLayer.Clear();
 
-            for (int i = 0; i <= hiddenLayerCount; i++)
+            for (int i = 0; i < hiddenLayerCount + 1; i ++)
             {
-                var newHiddenLayer = Matrix<float>.Build.Dense(1, hiddenNeuronCount);
+                Matrix<float> newHiddenLayer = Matrix<float>.Build.Dense(1, hiddenNeuronCount);
                 hiddenLayers.Add(newHiddenLayer);
             }
+
         }
 
-        private void RandomizeWeights() {
+        public void RandomiseWeights()
+        {
             for (int i = 0; i < weights.Count; i++)
             {
                 for (int x = 0; x < weights[i].RowCount; x++)
                 {
                     for (int y = 0; y < weights[i].ColumnCount; y++)
                     {
-                        weights[i][x, y] = UnityEngine.Random.Range(-1f, 1f);
+                        weights[i][x, y] = Random.Range(-1f, 1f);
                     }
                 }
             }
         }
 
-        public (float, float) RunNetwork(float[] sensors) {
+        public (float, float) RunNetwork (float[] sensors)
+        {
             for (int i = 0; i < sensors.Length; i++) {
                 inputLayer[0, i] = sensors[i];
             }
@@ -117,12 +143,13 @@ namespace Coursework.Core
                 var layer = (i == 0) ? inputLayer : hiddenLayers[i - 1];
                 hiddenLayers[i] = ((layer * weights[i]) + biases[i]).PointwiseTanh();
             }
-            
-            outputLayer = ((hiddenLayers[hiddenLayers.Count - 1] * weights[weights.Count - 1]) + biases[biases.Count - 1]).PointwiseTanh();
 
-            // First output is X and second output is Y
-            return ((float)Math.Tanh(outputLayer[0, 0]), (float)Math.Tanh(outputLayer[0, 1]));
+            outputLayer = ((hiddenLayers[hiddenLayers.Count-1]*weights[weights.Count-1])+biases[biases.Count-1]).PointwiseTanh();
+
+            //First output is acceleration and second output is steering
+            return (Sigmoid(outputLayer[0,0]), (float)Math.Tanh(outputLayer[0,1]));
         }
+
+        private float Sigmoid (float s) => (1 / (1 + Mathf.Exp(-s)));
     }
 }
-
